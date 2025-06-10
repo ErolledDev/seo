@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ExternalLink, Clock, ArrowRight } from 'lucide-react';
+import { ExternalLink, ArrowRight } from 'lucide-react';
 import Image from 'next/image';
 
 interface RedirectPageProps {
@@ -26,26 +26,7 @@ export default function RedirectPage({
   siteName,
   type,
 }: RedirectPageProps) {
-  const [countdown, setCountdown] = useState(5);
   const [isRedirecting, setIsRedirecting] = useState(false);
-
-  useEffect(() => {
-    if (!targetUrl) return;
-
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setIsRedirecting(true);
-          window.location.href = targetUrl;
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [targetUrl]);
 
   const handleRedirectNow = () => {
     if (targetUrl) {
@@ -105,26 +86,26 @@ export default function RedirectPage({
           )}
 
           {targetUrl && (
-            <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-              <div className="flex items-center justify-center space-x-2 text-gray-600">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm">
-                  {isRedirecting ? 'Redirecting now...' : `Redirecting in ${countdown} seconds`}
-                </span>
+            <div className="bg-gray-50 rounded-lg p-6 space-y-4">
+              <div className="text-center">
+                <p className="text-gray-700 mb-4">
+                  Ready to continue to your destination?
+                </p>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button
                   onClick={handleRedirectNow}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-lg"
                   disabled={isRedirecting}
+                  size="lg"
                 >
                   {isRedirecting ? (
                     'Redirecting...'
                   ) : (
                     <>
                       Continue Now
-                      <ArrowRight className="w-4 h-4 ml-2" />
+                      <ArrowRight className="w-5 h-5 ml-2" />
                     </>
                   )}
                 </Button>
@@ -132,14 +113,15 @@ export default function RedirectPage({
                 <Button
                   variant="outline"
                   onClick={() => window.open(targetUrl, '_blank')}
-                  className="px-6 py-2"
+                  className="px-8 py-3 text-lg"
+                  size="lg"
                 >
                   Open in New Tab
-                  <ExternalLink className="w-4 h-4 ml-2" />
+                  <ExternalLink className="w-5 h-5 ml-2" />
                 </Button>
               </div>
 
-              <div className="text-center">
+              <div className="text-center pt-2">
                 <p className="text-xs text-gray-500 break-all">
                   Destination: {targetUrl}
                 </p>
@@ -148,9 +130,9 @@ export default function RedirectPage({
           )}
 
           {!targetUrl && (
-            <div className="text-center text-gray-500">
-              <p>This is a preview of your redirect page.</p>
-              <p className="text-sm mt-1">Add a target URL to enable redirection.</p>
+            <div className="text-center text-gray-500 bg-gray-50 rounded-lg p-6">
+              <p className="text-lg mb-2">This is a preview of your redirect page.</p>
+              <p className="text-sm">Add a target URL to enable redirection functionality.</p>
             </div>
           )}
         </CardContent>

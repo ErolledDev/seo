@@ -1,3 +1,5 @@
+import { CloudStorage } from './storage';
+
 export interface RedirectConfig {
   id: string;
   title: string;
@@ -11,8 +13,8 @@ export interface RedirectConfig {
   updatedAt: Date;
 }
 
-// In a real application, this would be connected to a database
-let redirectsData: RedirectConfig[] = [
+// Local fallback data
+let localRedirectsData: RedirectConfig[] = [
   {
     id: 'sample-product-1',
     title: 'Premium Leather Wallet - Handcrafted Excellence',
@@ -52,12 +54,43 @@ let redirectsData: RedirectConfig[] = [
 ];
 
 export class RedirectManager {
+  private static async syncWithCloud(): Promise<RedirectConfig[]> {
+    try {
+      const cloudData = await CloudStorage.readData();
+      if (cloudData && cloudData.redirects) {
+        // Convert date strings back to Date objects
+        const redirects = cloudData.redirects.map((redirect: any) => ({
+          ...redirect,
+          createdAt: new Date(redirect.createdAt),
+          updatedAt: new Date(redirect.updatedAt),
+        }));
+        localRedirectsData = redirects;
+        return redirects;
+      }
+    } catch (error) {
+      console.error('Error syncing with cloud:', error);
+    }
+    return localRedirectsData;
+  }
+
+  private static async saveToCloud(redirects: RedirectConfig[]): Promise<void> {
+    try {
+      await CloudStorage.writeData({
+        redirects,
+        lastUpdated: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error saving to cloud:', error);
+    }
+  }
+
   static async getAllRedirects(): Promise<RedirectConfig[]> {
-    return [...redirectsData];
+    return await this.syncWithCloud();
   }
 
   static async getRedirectById(id: string): Promise<RedirectConfig | null> {
-    return redirectsData.find(redirect => redirect.id === id) || null;
+    const redirects = await this.syncWithCloud();
+    return redirects.find(redirect => redirect.id === id) || null;
   }
 
   static async createRedirect(config: Omit<RedirectConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<RedirectConfig> {
@@ -68,28 +101,31 @@ export class RedirectManager {
       updatedAt: new Date(),
     };
     
-    redirectsData.push(newRedirect);
+    localRedirectsData.push(newRedirect);
+    await this.saveToCloud(localRedirectsData);
     return newRedirect;
   }
 
   static async updateRedirect(id: string, updates: Partial<Omit<RedirectConfig, 'id' | 'createdAt'>>): Promise<RedirectConfig | null> {
-    const index = redirectsData.findIndex(redirect => redirect.id === id);
+    const index = localRedirectsData.findIndex(redirect => redirect.id === id);
     if (index === -1) return null;
 
-    redirectsData[index] = {
-      ...redirectsData[index],
+    localRedirectsData[index] = {
+      ...localRedirectsData[index],
       ...updates,
       updatedAt: new Date(),
     };
 
-    return redirectsData[index];
+    await this.saveToCloud(localRedirectsData);
+    return localRedirectsData[index];
   }
 
   static async deleteRedirect(id: string): Promise<boolean> {
-    const index = redirectsData.findIndex(redirect => redirect.id === id);
+    const index = localRedirectsData.findIndex(redirect => redirect.id === id);
     if (index === -1) return false;
 
-    redirectsData.splice(index, 1);
+    localRedirectsData.splice(index, 1);
+    await this.saveToCloud(localRedirectsData);
     return true;
   }
 
