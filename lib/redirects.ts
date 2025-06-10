@@ -8,6 +8,7 @@ import {
   deleteDoc, 
   query, 
   orderBy,
+  where,
   Timestamp 
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -32,24 +33,45 @@ export class RedirectManager {
   static async getAllRedirects(userId: string): Promise<RedirectConfig[]> {
     try {
       const redirectsRef = collection(db, this.COLLECTION_NAME);
-      const q = query(redirectsRef, orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
       
-      const redirects: RedirectConfig[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Only return redirects for the current user
-        if (data.userId === userId) {
+      // Try the optimized query first (requires composite index)
+      try {
+        const q = query(redirectsRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        
+        const redirects: RedirectConfig[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
           redirects.push({
             id: doc.id,
             ...data,
             createdAt: data.createdAt.toDate(),
             updatedAt: data.updatedAt.toDate(),
           } as RedirectConfig);
-        }
-      });
-      
-      return redirects;
+        });
+        
+        return redirects;
+      } catch (indexError: any) {
+        // If composite index doesn't exist, fall back to filtering only by userId
+        console.warn('Composite index not available, using fallback query:', indexError.message);
+        
+        const fallbackQuery = query(redirectsRef, where('userId', '==', userId));
+        const querySnapshot = await getDocs(fallbackQuery);
+        
+        const redirects: RedirectConfig[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          redirects.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+          } as RedirectConfig);
+        });
+        
+        // Sort client-side since we can't use orderBy without the composite index
+        return redirects.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      }
     } catch (error) {
       console.error('Error fetching redirects:', error);
       throw error;
