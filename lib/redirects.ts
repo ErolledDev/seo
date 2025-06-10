@@ -1,4 +1,16 @@
-import { CloudStorage } from './storage';
+import { 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  orderBy,
+  Timestamp 
+} from 'firebase/firestore';
+import { db } from './firebase';
 
 export interface RedirectConfig {
   id: string;
@@ -9,128 +21,179 @@ export interface RedirectConfig {
   keywords?: string;
   siteName?: string;
   type?: string;
+  userId: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Local fallback data
-let localRedirectsData: RedirectConfig[] = [
-  {
-    id: 'sample-product-1',
-    title: 'Premium Leather Wallet - Handcrafted Excellence',
-    description: 'Discover our premium handcrafted leather wallet made from full-grain leather. Perfect for the modern professional.',
-    image: 'https://images.pexels.com/photos/1152077/pexels-photo-1152077.jpeg',
-    targetUrl: 'https://example.com/products/leather-wallet',
-    keywords: 'leather wallet, premium wallet, handcrafted leather',
-    siteName: 'Premium Goods Store',
-    type: 'product',
-    createdAt: new Date('2024-01-15'),
-    updatedAt: new Date('2024-01-15'),
-  },
-  {
-    id: 'sample-service-1',
-    title: 'Expert Web Design Services - Transform Your Online Presence',
-    description: 'Professional web design services that transform your business. Custom designs, responsive layouts, and modern aesthetics.',
-    image: 'https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg',
-    targetUrl: 'https://example.com/services/web-design',
-    keywords: 'web design, website design, responsive design, UI/UX',
-    siteName: 'Digital Agency Pro',
-    type: 'service',
-    createdAt: new Date('2024-01-10'),
-    updatedAt: new Date('2024-01-10'),
-  },
-  {
-    id: 'sample-article-1',
-    title: '10 Essential Tips for Effective Digital Marketing',
-    description: 'Master digital marketing with these proven strategies. Learn SEO, social media marketing, and content creation techniques.',
-    image: 'https://images.pexels.com/photos/270408/pexels-photo-270408.jpeg',
-    targetUrl: 'https://example.com/blog/digital-marketing-tips',
-    keywords: 'digital marketing, SEO, social media marketing, content marketing',
-    siteName: 'Marketing Insights Blog',
-    type: 'article',
-    createdAt: new Date('2024-01-05'),
-    updatedAt: new Date('2024-01-05'),
-  },
-];
-
 export class RedirectManager {
-  private static async syncWithCloud(): Promise<RedirectConfig[]> {
-    try {
-      const cloudData = await CloudStorage.readData();
-      if (cloudData && cloudData.redirects) {
-        // Convert date strings back to Date objects
-        const redirects = cloudData.redirects.map((redirect: any) => ({
-          ...redirect,
-          createdAt: new Date(redirect.createdAt),
-          updatedAt: new Date(redirect.updatedAt),
-        }));
-        localRedirectsData = redirects;
-        return redirects;
-      }
-    } catch (error) {
-      console.error('Error syncing with cloud:', error);
-    }
-    return localRedirectsData;
-  }
+  private static readonly COLLECTION_NAME = 'redirects';
 
-  private static async saveToCloud(redirects: RedirectConfig[]): Promise<void> {
+  static async getAllRedirects(userId: string): Promise<RedirectConfig[]> {
     try {
-      await CloudStorage.writeData({
-        redirects,
-        lastUpdated: new Date().toISOString(),
+      const redirectsRef = collection(db, this.COLLECTION_NAME);
+      const q = query(redirectsRef, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      const redirects: RedirectConfig[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        // Only return redirects for the current user
+        if (data.userId === userId) {
+          redirects.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+          } as RedirectConfig);
+        }
       });
+      
+      return redirects;
     } catch (error) {
-      console.error('Error saving to cloud:', error);
+      console.error('Error fetching redirects:', error);
+      throw error;
     }
   }
 
-  static async getAllRedirects(): Promise<RedirectConfig[]> {
-    return await this.syncWithCloud();
+  static async getRedirectById(id: string, userId: string): Promise<RedirectConfig | null> {
+    try {
+      const docRef = doc(db, this.COLLECTION_NAME, id);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        // Check if the redirect belongs to the user
+        if (data.userId === userId) {
+          return {
+            id: docSnap.id,
+            ...data,
+            createdAt: data.createdAt.toDate(),
+            updatedAt: data.updatedAt.toDate(),
+          } as RedirectConfig;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching redirect:', error);
+      throw error;
+    }
   }
 
-  static async getRedirectById(id: string): Promise<RedirectConfig | null> {
-    const redirects = await this.syncWithCloud();
-    return redirects.find(redirect => redirect.id === id) || null;
+  static async createRedirect(
+    config: Omit<RedirectConfig, 'id' | 'createdAt' | 'updatedAt'>,
+    userId: string
+  ): Promise<RedirectConfig> {
+    try {
+      const now = Timestamp.now();
+      const redirectData = {
+        ...config,
+        userId,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const docRef = await addDoc(collection(db, this.COLLECTION_NAME), redirectData);
+      
+      return {
+        id: docRef.id,
+        ...config,
+        userId,
+        createdAt: now.toDate(),
+        updatedAt: now.toDate(),
+      };
+    } catch (error) {
+      console.error('Error creating redirect:', error);
+      throw error;
+    }
   }
 
-  static async createRedirect(config: Omit<RedirectConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<RedirectConfig> {
-    const newRedirect: RedirectConfig = {
-      ...config,
-      id: this.generateId(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
-    localRedirectsData.push(newRedirect);
-    await this.saveToCloud(localRedirectsData);
-    return newRedirect;
+  static async updateRedirect(
+    id: string,
+    updates: Partial<Omit<RedirectConfig, 'id' | 'createdAt' | 'userId'>>,
+    userId: string
+  ): Promise<RedirectConfig | null> {
+    try {
+      const docRef = doc(db, this.COLLECTION_NAME, id);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        return null;
+      }
+
+      const data = docSnap.data();
+      // Check if the redirect belongs to the user
+      if (data.userId !== userId) {
+        throw new Error('Unauthorized: You can only update your own redirects');
+      }
+
+      const now = Timestamp.now();
+      await updateDoc(docRef, {
+        ...updates,
+        updatedAt: now,
+      });
+
+      return {
+        id,
+        ...data,
+        ...updates,
+        userId,
+        createdAt: data.createdAt.toDate(),
+        updatedAt: now.toDate(),
+      } as RedirectConfig;
+    } catch (error) {
+      console.error('Error updating redirect:', error);
+      throw error;
+    }
   }
 
-  static async updateRedirect(id: string, updates: Partial<Omit<RedirectConfig, 'id' | 'createdAt'>>): Promise<RedirectConfig | null> {
-    const index = localRedirectsData.findIndex(redirect => redirect.id === id);
-    if (index === -1) return null;
+  static async deleteRedirect(id: string, userId: string): Promise<boolean> {
+    try {
+      const docRef = doc(db, this.COLLECTION_NAME, id);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) {
+        return false;
+      }
 
-    localRedirectsData[index] = {
-      ...localRedirectsData[index],
-      ...updates,
-      updatedAt: new Date(),
-    };
+      const data = docSnap.data();
+      // Check if the redirect belongs to the user
+      if (data.userId !== userId) {
+        throw new Error('Unauthorized: You can only delete your own redirects');
+      }
 
-    await this.saveToCloud(localRedirectsData);
-    return localRedirectsData[index];
+      await deleteDoc(docRef);
+      return true;
+    } catch (error) {
+      console.error('Error deleting redirect:', error);
+      throw error;
+    }
   }
 
-  static async deleteRedirect(id: string): Promise<boolean> {
-    const index = localRedirectsData.findIndex(redirect => redirect.id === id);
-    if (index === -1) return false;
-
-    localRedirectsData.splice(index, 1);
-    await this.saveToCloud(localRedirectsData);
-    return true;
-  }
-
-  static generateId(): string {
-    return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  // Get all redirects for sitemap (public method)
+  static async getAllRedirectsForSitemap(): Promise<RedirectConfig[]> {
+    try {
+      const redirectsRef = collection(db, this.COLLECTION_NAME);
+      const q = query(redirectsRef, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      const redirects: RedirectConfig[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        redirects.push({
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
+        } as RedirectConfig);
+      });
+      
+      return redirects;
+    } catch (error) {
+      console.error('Error fetching redirects for sitemap:', error);
+      return [];
+    }
   }
 
   static buildRedirectUrl(baseUrl: string, config: RedirectConfig): string {
