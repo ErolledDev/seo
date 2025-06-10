@@ -6,8 +6,5 @@
     "app/api/sitemap.xml/route.ts": {
       "maxDuration": 10
     }
-  },
-  "env": {
-    "NEXT_PUBLIC_BASE_URL": "@next_public_base_url"
   }
 }
