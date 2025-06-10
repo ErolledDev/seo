@@ -28,7 +28,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     };
   }
 
-  const currentUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/u?${new URLSearchParams(searchParams as Record<string, string>).toString()}`;
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://your-domain.vercel.app';
+  const currentUrl = `${baseUrl}/u?${new URLSearchParams(searchParams as Record<string, string>).toString()}`;
 
   return {
     title: title || 'Redirect Page',

@@ -4,7 +4,7 @@ import { RedirectManager } from '@/lib/redirects';
 export async function GET() {
   try {
     const redirects = await RedirectManager.getAllRedirects();
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://your-domain.vercel.app';
 
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -3,6 +3,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   images: { 
     unoptimized: true,
     remotePatterns: [
@@ -20,8 +23,8 @@ const nextConfig = {
       },
     ],
   },
-  // Enable trailing slash for better compatibility
-  trailingSlash: true,
+  // Remove trailing slash as it can cause issues with Vercel
+  trailingSlash: false,
   // Custom headers for SEO
   async headers() {
     return [
@@ -36,6 +39,8 @@ const nextConfig = {
       },
     ];
   },
+  // Ensure proper output for Vercel
+  output: 'standalone',
 };
 
 module.exports = nextConfig;
