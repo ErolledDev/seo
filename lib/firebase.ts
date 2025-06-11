@@ -34,27 +34,31 @@ export const auth = getAuth(app);
 // Initialize Cloud Firestore
 export const db = getFirestore(app);
 
-// Only connect to emulators in development and if not already connected
-if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
+// Only connect to emulators if explicitly enabled and in development
+const useEmulators = process.env.FIREBASE_USE_EMULATORS === 'true';
+
+if (process.env.NODE_ENV === 'development' && useEmulators && typeof window !== 'undefined') {
   try {
     // Check if emulators are already connected
     if (!auth._delegate._config.emulator) {
       connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+      console.log('Connected to Firebase Auth emulator');
     }
   } catch (error) {
-    // Emulator connection failed or already connected, continue with production
-    console.log('Auth emulator not available, using production Firebase');
+    console.warn('Failed to connect to Auth emulator:', error);
   }
 
   try {
     // Check if Firestore emulator is already connected
     if (!db._delegate._databaseId.projectId.includes('demo-')) {
       connectFirestoreEmulator(db, 'localhost', 8080);
+      console.log('Connected to Firestore emulator');
     }
   } catch (error) {
-    // Emulator connection failed or already connected, continue with production
-    console.log('Firestore emulator not available, using production Firebase');
+    console.warn('Failed to connect to Firestore emulator:', error);
   }
+} else if (process.env.NODE_ENV === 'development') {
+  console.log('Using production Firebase (emulators disabled)');
 }
 
 export default app;
