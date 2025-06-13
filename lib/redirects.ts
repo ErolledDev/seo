@@ -32,6 +32,11 @@ export class RedirectManager {
 
   static async getAllRedirects(userId: string): Promise<RedirectConfig[]> {
     try {
+      if (!db) {
+        console.warn('Firestore not initialized');
+        return [];
+      }
+
       const redirectsRef = collection(db, this.COLLECTION_NAME);
       
       // Try the optimized query first (requires composite index)
@@ -74,12 +79,17 @@ export class RedirectManager {
       }
     } catch (error) {
       console.error('Error fetching redirects:', error);
-      throw error;
+      return [];
     }
   }
 
   static async getRedirectById(id: string, userId: string): Promise<RedirectConfig | null> {
     try {
+      if (!db) {
+        console.warn('Firestore not initialized');
+        return null;
+      }
+
       const docRef = doc(db, this.COLLECTION_NAME, id);
       const docSnap = await getDoc(docRef);
       
@@ -99,7 +109,7 @@ export class RedirectManager {
       return null;
     } catch (error) {
       console.error('Error fetching redirect:', error);
-      throw error;
+      return null;
     }
   }
 
@@ -108,6 +118,10 @@ export class RedirectManager {
     userId: string
   ): Promise<RedirectConfig> {
     try {
+      if (!db) {
+        throw new Error('Firestore not initialized');
+      }
+
       const now = Timestamp.now();
       const redirectData = {
         ...config,
@@ -137,6 +151,10 @@ export class RedirectManager {
     userId: string
   ): Promise<RedirectConfig | null> {
     try {
+      if (!db) {
+        throw new Error('Firestore not initialized');
+      }
+
       const docRef = doc(db, this.COLLECTION_NAME, id);
       const docSnap = await getDoc(docRef);
       
@@ -172,6 +190,10 @@ export class RedirectManager {
 
   static async deleteRedirect(id: string, userId: string): Promise<boolean> {
     try {
+      if (!db) {
+        throw new Error('Firestore not initialized');
+      }
+
       const docRef = doc(db, this.COLLECTION_NAME, id);
       const docSnap = await getDoc(docRef);
       
@@ -196,6 +218,11 @@ export class RedirectManager {
   // Get all redirects for sitemap (public method)
   static async getAllRedirectsForSitemap(): Promise<RedirectConfig[]> {
     try {
+      if (!db) {
+        console.warn('Firestore not initialized, returning empty sitemap');
+        return [];
+      }
+
       const redirectsRef = collection(db, this.COLLECTION_NAME);
       const q = query(redirectsRef, orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);

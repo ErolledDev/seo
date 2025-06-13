@@ -23,24 +23,7 @@ const nextConfig = {
       },
     ],
   },
-  // Remove trailing slash as it can cause issues with Vercel
   trailingSlash: false,
-  // Custom headers for SEO
-  async headers() {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Robots-Tag',
-            value: 'index, follow',
-          },
-        ],
-      },
-    ];
-  },
-  // Ensure proper output for Vercel
-  output: 'standalone',
 };
 
 module.exports = nextConfig;
