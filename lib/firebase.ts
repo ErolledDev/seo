@@ -11,45 +11,62 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const isBuildTime = process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+// Validate Firebase configuration
 const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
 const missingKeys = requiredKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
 
-if (missingKeys.length > 0 && !isBuildTime) {
-  throw new Error(`Missing Firebase configuration: ${missingKeys.join(', ')}`);
+if (missingKeys.length > 0) {
+  console.error('Missing Firebase configuration keys:', missingKeys);
+  console.error('Current config:', {
+    apiKey: firebaseConfig.apiKey ? `${firebaseConfig.apiKey.substring(0, 10)}...` : 'MISSING',
+    authDomain: firebaseConfig.authDomain || 'MISSING',
+    projectId: firebaseConfig.projectId || 'MISSING',
+    appId: firebaseConfig.appId ? `${firebaseConfig.appId.substring(0, 10)}...` : 'MISSING',
+  });
+  
+  if (typeof window !== 'undefined') {
+    alert(`Firebase configuration error: Missing ${missingKeys.join(', ')}. Please check your environment variables.`);
+  }
 }
 
 // Initialize Firebase services
 let app, auth, db;
 
-if (!isBuildTime && missingKeys.length === 0) {
-  app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-  auth = getAuth(app);
-  db = getFirestore(app);
+try {
+  if (missingKeys.length === 0) {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    auth = getAuth(app);
+    db = getFirestore(app);
 
-  // Connect to emulators in development
-  if (process.env.NODE_ENV === 'development' && 
-      process.env.FIREBASE_USE_EMULATORS === 'true' && 
-      typeof window !== 'undefined') {
-    
-    try {
-      if (!(auth as any)._config?.emulator) {
-        connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    // Connect to emulators in development only
+    if (process.env.NODE_ENV === 'development' && 
+        process.env.FIREBASE_USE_EMULATORS === 'true' && 
+        typeof window !== 'undefined') {
+      
+      try {
+        if (!(auth as any)._config?.emulator) {
+          connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+        }
+      } catch (error) {
+        console.warn('Auth emulator connection failed:', error);
       }
-    } catch (error) {
-      console.warn('Auth emulator connection failed:', error);
-    }
 
-    try {
-      const firestoreSettings = (db as any)._delegate?._databaseId;
-      if (!firestoreSettings?.projectId.includes('demo-')) {
-        connectFirestoreEmulator(db, 'localhost', 8080);
+      try {
+        const firestoreSettings = (db as any)._delegate?._databaseId;
+        if (!firestoreSettings?.projectId.includes('demo-')) {
+          connectFirestoreEmulator(db, 'localhost', 8080);
+        }
+      } catch (error) {
+        console.warn('Firestore emulator connection failed:', error);
       }
-    } catch (error) {
-      console.warn('Firestore emulator connection failed:', error);
     }
+  } else {
+    console.error('Firebase initialization skipped due to missing configuration');
+    auth = null as any;
+    db = null as any;
   }
-} else {
+} catch (error) {
+  console.error('Firebase initialization error:', error);
   auth = null as any;
   db = null as any;
 }

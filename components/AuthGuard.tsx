@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Shield } from 'lucide-react';
+import { Loader2, Shield, AlertTriangle } from 'lucide-react';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -22,6 +22,15 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const { toast } = useToast();
 
   const handleAuth = async (action: 'signin' | 'signup') => {
+    if (!email || !password) {
+      toast({
+        title: 'Error',
+        description: 'Please fill in all fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (action === 'signin') {
@@ -32,9 +41,41 @@ export default function AuthGuard({ children }: AuthGuardProps) {
         toast({ title: 'Success', description: 'Account created successfully' });
       }
     } catch (error: any) {
+      console.error('Auth error:', error);
+      
+      let errorMessage = 'An unexpected error occurred';
+      
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/api-key-not-valid':
+            errorMessage = 'Firebase configuration error. Please contact support.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'Please enter a valid email address';
+            break;
+          case 'auth/user-not-found':
+            errorMessage = 'No account found with this email';
+            break;
+          case 'auth/wrong-password':
+            errorMessage = 'Incorrect password';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'Password should be at least 6 characters';
+            break;
+          case 'auth/email-already-in-use':
+            errorMessage = 'An account with this email already exists';
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = 'Too many failed attempts. Please try again later';
+            break;
+          default:
+            errorMessage = error.message || `Failed to ${action === 'signin' ? 'sign in' : 'create account'}`;
+        }
+      }
+
       toast({
-        title: 'Error',
-        description: error.message || `Failed to ${action === 'signin' ? 'sign in' : 'create account'}`,
+        title: 'Authentication Error',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -56,6 +97,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       await resetPassword(email);
       toast({ title: 'Success', description: 'Password reset email sent' });
     } catch (error: any) {
+      console.error('Reset password error:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send reset email',
@@ -63,6 +105,55 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       });
     }
   };
+
+  // Check if Firebase is properly configured
+  const isFirebaseConfigured = process.env.NEXT_PUBLIC_FIREBASE_API_KEY && 
+                               process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
+                               process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'build-placeholder';
+
+  if (!isFirebaseConfigured) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-100 p-4">
+        <Card className="w-full max-w-md shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+          <CardHeader className="text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-600" />
+            </div>
+            <CardTitle className="text-2xl font-bold text-red-900">Configuration Error</CardTitle>
+            <CardDescription className="text-red-700">
+              Firebase is not properly configured for this deployment
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <h3 className="font-semibold text-red-900 mb-2">Missing Configuration</h3>
+              <p className="text-sm text-red-800 mb-3">
+                The Firebase API key and project configuration are missing or invalid.
+              </p>
+              <div className="text-xs text-red-700 space-y-1">
+                <p>• API Key: {process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'Present' : 'Missing'}</p>
+                <p>• Project ID: {process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'Present' : 'Missing'}</p>
+                <p>• Auth Domain: {process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'Present' : 'Missing'}</p>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">For Developers</h3>
+              <p className="text-sm text-blue-800">
+                Please set the Firebase environment variables in your deployment platform:
+              </p>
+              <ul className="text-xs text-blue-700 mt-2 space-y-1">
+                <li>• NEXT_PUBLIC_FIREBASE_API_KEY</li>
+                <li>• NEXT_PUBLIC_FIREBASE_PROJECT_ID</li>
+                <li>• NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN</li>
+                <li>• NEXT_PUBLIC_FIREBASE_APP_ID</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -106,6 +197,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Enter your email"
                       required
+                      disabled={isSubmitting}
                     />
                   </div>
                   <div className="space-y-2">
@@ -117,6 +209,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter your password"
                       required
+                      disabled={isSubmitting}
                     />
                   </div>
                   <Button
@@ -136,7 +229,12 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                 </form>
 
                 <div className="text-center">
-                  <Button variant="link" onClick={handleResetPassword} className="text-sm">
+                  <Button 
+                    variant="link" 
+                    onClick={handleResetPassword} 
+                    className="text-sm"
+                    disabled={isSubmitting}
+                  >
                     Forgot Password?
                   </Button>
                 </div>
@@ -153,6 +251,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="Enter your email"
                       required
+                      disabled={isSubmitting}
                     />
                   </div>
                   <div className="space-y-2">
@@ -165,6 +264,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                       placeholder="Create a password (min 6 characters)"
                       required
                       minLength={6}
+                      disabled={isSubmitting}
                     />
                   </div>
                   <Button
