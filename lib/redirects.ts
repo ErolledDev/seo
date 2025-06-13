@@ -30,51 +30,45 @@ export interface RedirectConfig {
 export class RedirectManager {
   private static readonly COLLECTION_NAME = 'redirects';
 
-  static async getAllRedirects(userId: string): Promise<RedirectConfig[]> {
-    try {
-      if (!db) {
-        console.warn('Firestore not initialized');
-        return [];
-      }
+  private static validateDb(): void {
+    if (!db) {
+      throw new Error('Firestore not initialized');
+    }
+  }
 
+  private static convertTimestamps(data: any): RedirectConfig {
+    return {
+      ...data,
+      createdAt: data.createdAt.toDate(),
+      updatedAt: data.updatedAt.toDate(),
+    } as RedirectConfig;
+  }
+
+  static async getAllRedirects(userId: string): Promise<RedirectConfig[]> {
+    if (!db) return [];
+
+    try {
       const redirectsRef = collection(db, this.COLLECTION_NAME);
       
-      // Try the optimized query first (requires composite index)
+      // Try optimized query with composite index
       try {
         const q = query(redirectsRef, where('userId', '==', userId), orderBy('createdAt', 'desc'));
         const querySnapshot = await getDocs(q);
         
-        const redirects: RedirectConfig[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          redirects.push({
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt.toDate(),
-            updatedAt: data.updatedAt.toDate(),
-          } as RedirectConfig);
-        });
-        
-        return redirects;
-      } catch (indexError: any) {
-        // If composite index doesn't exist, fall back to filtering only by userId
-        console.warn('Composite index not available, using fallback query:', indexError.message);
-        
+        return querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...this.convertTimestamps(doc.data())
+        }));
+      } catch (indexError) {
+        // Fallback without orderBy if composite index doesn't exist
         const fallbackQuery = query(redirectsRef, where('userId', '==', userId));
         const querySnapshot = await getDocs(fallbackQuery);
         
-        const redirects: RedirectConfig[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          redirects.push({
-            id: doc.id,
-            ...data,
-            createdAt: data.createdAt.toDate(),
-            updatedAt: data.updatedAt.toDate(),
-          } as RedirectConfig);
-        });
+        const redirects = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...this.convertTimestamps(doc.data())
+        }));
         
-        // Sort client-side since we can't use orderBy without the composite index
         return redirects.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       }
     } catch (error) {
@@ -84,25 +78,19 @@ export class RedirectManager {
   }
 
   static async getRedirectById(id: string, userId: string): Promise<RedirectConfig | null> {
-    try {
-      if (!db) {
-        console.warn('Firestore not initialized');
-        return null;
-      }
+    if (!db) return null;
 
+    try {
       const docRef = doc(db, this.COLLECTION_NAME, id);
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Check if the redirect belongs to the user
         if (data.userId === userId) {
           return {
             id: docSnap.id,
-            ...data,
-            createdAt: data.createdAt.toDate(),
-            updatedAt: data.updatedAt.toDate(),
-          } as RedirectConfig;
+            ...this.convertTimestamps(data)
+          };
         }
       }
       
@@ -117,32 +105,25 @@ export class RedirectManager {
     config: Omit<RedirectConfig, 'id' | 'createdAt' | 'updatedAt'>,
     userId: string
   ): Promise<RedirectConfig> {
-    try {
-      if (!db) {
-        throw new Error('Firestore not initialized');
-      }
+    this.validateDb();
 
-      const now = Timestamp.now();
-      const redirectData = {
-        ...config,
-        userId,
-        createdAt: now,
-        updatedAt: now,
-      };
+    const now = Timestamp.now();
+    const redirectData = {
+      ...config,
+      userId,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-      const docRef = await addDoc(collection(db, this.COLLECTION_NAME), redirectData);
-      
-      return {
-        id: docRef.id,
-        ...config,
-        userId,
-        createdAt: now.toDate(),
-        updatedAt: now.toDate(),
-      };
-    } catch (error) {
-      console.error('Error creating redirect:', error);
-      throw error;
-    }
+    const docRef = await addDoc(collection(db, this.COLLECTION_NAME), redirectData);
+    
+    return {
+      id: docRef.id,
+      ...config,
+      userId,
+      createdAt: now.toDate(),
+      updatedAt: now.toDate(),
+    };
   }
 
   static async updateRedirect(
@@ -150,95 +131,63 @@ export class RedirectManager {
     updates: Partial<Omit<RedirectConfig, 'id' | 'createdAt' | 'userId'>>,
     userId: string
   ): Promise<RedirectConfig | null> {
-    try {
-      if (!db) {
-        throw new Error('Firestore not initialized');
-      }
+    this.validateDb();
 
-      const docRef = doc(db, this.COLLECTION_NAME, id);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists()) {
-        return null;
-      }
+    const docRef = doc(db, this.COLLECTION_NAME, id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) return null;
 
-      const data = docSnap.data();
-      // Check if the redirect belongs to the user
-      if (data.userId !== userId) {
-        throw new Error('Unauthorized: You can only update your own redirects');
-      }
-
-      const now = Timestamp.now();
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: now,
-      });
-
-      return {
-        id,
-        ...data,
-        ...updates,
-        userId,
-        createdAt: data.createdAt.toDate(),
-        updatedAt: now.toDate(),
-      } as RedirectConfig;
-    } catch (error) {
-      console.error('Error updating redirect:', error);
-      throw error;
+    const data = docSnap.data();
+    if (data.userId !== userId) {
+      throw new Error('Unauthorized: You can only update your own redirects');
     }
+
+    const now = Timestamp.now();
+    await updateDoc(docRef, {
+      ...updates,
+      updatedAt: now,
+    });
+
+    return {
+      id,
+      ...data,
+      ...updates,
+      userId,
+      createdAt: data.createdAt.toDate(),
+      updatedAt: now.toDate(),
+    } as RedirectConfig;
   }
 
   static async deleteRedirect(id: string, userId: string): Promise<boolean> {
-    try {
-      if (!db) {
-        throw new Error('Firestore not initialized');
-      }
+    this.validateDb();
 
-      const docRef = doc(db, this.COLLECTION_NAME, id);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists()) {
-        return false;
-      }
+    const docRef = doc(db, this.COLLECTION_NAME, id);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) return false;
 
-      const data = docSnap.data();
-      // Check if the redirect belongs to the user
-      if (data.userId !== userId) {
-        throw new Error('Unauthorized: You can only delete your own redirects');
-      }
-
-      await deleteDoc(docRef);
-      return true;
-    } catch (error) {
-      console.error('Error deleting redirect:', error);
-      throw error;
+    const data = docSnap.data();
+    if (data.userId !== userId) {
+      throw new Error('Unauthorized: You can only delete your own redirects');
     }
+
+    await deleteDoc(docRef);
+    return true;
   }
 
-  // Get all redirects for sitemap (public method)
   static async getAllRedirectsForSitemap(): Promise<RedirectConfig[]> {
-    try {
-      if (!db) {
-        console.warn('Firestore not initialized, returning empty sitemap');
-        return [];
-      }
+    if (!db) return [];
 
+    try {
       const redirectsRef = collection(db, this.COLLECTION_NAME);
       const q = query(redirectsRef, orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       
-      const redirects: RedirectConfig[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        redirects.push({
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        } as RedirectConfig);
-      });
-      
-      return redirects;
+      return querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...this.convertTimestamps(doc.data())
+      }));
     } catch (error) {
       console.error('Error fetching redirects for sitemap:', error);
       return [];

@@ -21,6 +21,49 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
+  const handleAuth = async (action: 'signin' | 'signup') => {
+    setIsSubmitting(true);
+    try {
+      if (action === 'signin') {
+        await signIn(email, password);
+        toast({ title: 'Success', description: 'Signed in successfully' });
+      } else {
+        await signUp(email, password);
+        toast({ title: 'Success', description: 'Account created successfully' });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || `Failed to ${action === 'signin' ? 'sign in' : 'create account'}`,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      toast({
+        title: 'Error',
+        description: 'Please enter your email first',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    try {
+      await resetPassword(email);
+      toast({ title: 'Success', description: 'Password reset email sent' });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send reset email',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -53,28 +96,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
               </TabsList>
 
               <TabsContent value="signin" className="space-y-4">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setIsSubmitting(true);
-                    try {
-                      await signIn(email, password);
-                      toast({
-                        title: 'Success',
-                        description: 'Signed in successfully',
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: 'Error',
-                        description: error.message || 'Failed to sign in',
-                        variant: 'destructive',
-                      });
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  className="space-y-4"
-                >
+                <form onSubmit={(e) => { e.preventDefault(); handleAuth('signin'); }} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -114,61 +136,14 @@ export default function AuthGuard({ children }: AuthGuardProps) {
                 </form>
 
                 <div className="text-center">
-                  <Button
-                    variant="link"
-                    onClick={async () => {
-                      if (!email) {
-                        toast({
-                          title: 'Error',
-                          description: 'Please enter your email first',
-                          variant: 'destructive',
-                        });
-                        return;
-                      }
-                      try {
-                        await resetPassword(email);
-                        toast({
-                          title: 'Success',
-                          description: 'Password reset email sent',
-                        });
-                      } catch (error: any) {
-                        toast({
-                          title: 'Error',
-                          description: error.message || 'Failed to send reset email',
-                          variant: 'destructive',
-                        });
-                      }
-                    }}
-                    className="text-sm"
-                  >
+                  <Button variant="link" onClick={handleResetPassword} className="text-sm">
                     Forgot Password?
                   </Button>
                 </div>
               </TabsContent>
 
               <TabsContent value="signup" className="space-y-4">
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setIsSubmitting(true);
-                    try {
-                      await signUp(email, password);
-                      toast({
-                        title: 'Success',
-                        description: 'Account created successfully',
-                      });
-                    } catch (error: any) {
-                      toast({
-                        title: 'Error',
-                        description: error.message || 'Failed to create account',
-                        variant: 'destructive',
-                      });
-                    } finally {
-                      setIsSubmitting(false);
-                    }
-                  }}
-                  className="space-y-4"
-                >
+                <form onSubmit={(e) => { e.preventDefault(); handleAuth('signup'); }} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-email">Email</Label>
                     <Input
